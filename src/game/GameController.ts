@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import {
   STORAGE_KEY,
-  GRID,
   CELL,
   MIN_LEN,
   BASE_POINTS,
@@ -18,7 +17,7 @@ import { createInitialState } from "../core/state";
 import { saveStorage, loadStorage } from "../systems/storage";
 import { createSceneContext, updateOrthoCamera } from "../render/scene";
 import { attachControls } from "../input/controls";
-import { clamp, rand, randInt, pick, lerpWrap } from "../utils/math";
+import { clamp, rand, randInt, pick } from "../utils/math";
 import { buildABCStage, buildWordStage, currentTarget, expectedKey, formatCase } from "./stages";
 import { makeSprite, disposeObject3D } from "../render/sprites";
 import { createSnakeSkinTexture, makeLetterVisual, makeToolVisual, createSnakeMesh } from "../render/models";
@@ -43,14 +42,35 @@ const groupFx = groups.fx;
 const groupHud = groups.hud;
 const ORTHO_HEIGHT = 19.2;
 
-const boardSize = GRID * CELL;
-const boardHalf = boardSize / 2;
+let gridCols = 16;
+let gridRows = 16;
+let orthoHeightDynamic = ORTHO_HEIGHT;
+let cameraCenterZ = 0;
+let hudTopPadRatio = 0.065;
+let hudY = 2.5;
+let hudToolStep = 0.86;
+let hudSideInsetRatio = 0.11;
+let hudToolRightRatio = 0.18;
+let gameReady = false;
+
+function boardWidth() {
+  return gridCols * CELL;
+}
+
+function boardHeight() {
+  return gridRows * CELL;
+}
+
+function boardHalfW() {
+  return boardWidth() / 2;
+}
+
+function boardHalfH() {
+  return boardHeight() / 2;
+}
+
 const boardController = createBoardController({
   groupBoard,
-  grid: GRID,
-  cell: CELL,
-  boardSize,
-  boardHalf,
   rand,
   clamp,
 });
@@ -103,7 +123,40 @@ function pickToolForStage() {
 }
 
 function toWorld(cellX: number, cellY: number) {
-  return new THREE.Vector3((cellX + 0.5) * CELL - boardHalf, 0, (cellY + 0.5) * CELL - boardHalf);
+  return new THREE.Vector3((cellX + 0.5) * CELL - boardHalfW(), 0, (cellY + 0.5) * CELL - boardHalfH());
+}
+
+function lerpWrapAxis(a: number, b: number, t: number, size: number) {
+  let d = b - a;
+  if (Math.abs(d) > size / 2) d += d > 0 ? -size : size;
+  let v = a + d * t;
+  if (v < 0) v += size;
+  if (v >= size) v -= size;
+  return v;
+}
+
+function computeResponsiveLayout(viewportWidth: number, viewportHeight: number, zoomScale: number) {
+  const hudPxReserve = clamp(viewportHeight * 0.18, 96, 172);
+  const usableBoardPxHeight = Math.max(180, viewportHeight - hudPxReserve);
+  const targetCellPx = clamp(Math.min(viewportWidth / 17, usableBoardPxHeight / 14), 24, 62);
+  const cols = clamp(Math.floor(viewportWidth / targetCellPx), 10, 44);
+  const rows = clamp(Math.floor(usableBoardPxHeight / targetCellPx), 8, 34);
+
+  const bw = cols * CELL;
+  const bh = rows * CELL;
+  const boardPadding = 1.0;
+  const hudReserve = clamp(bh * 0.2, 3.2, 7.5);
+  const orthoHeight = Math.max(bh + boardPadding * 2 + hudReserve, (bw + boardPadding * 2) / Math.max(0.55, viewportWidth / Math.max(1, viewportHeight))) * zoomScale;
+  const zOffset = hudReserve * 0.52;
+
+  const compact = viewportHeight < 760 || viewportWidth < 420;
+  const topPadRatio = compact ? 0.078 : 0.062;
+  const hudWorldY = compact ? 2.2 : 2.5;
+  const toolStep = compact ? 0.72 : 0.86;
+  const sideInsetRatio = compact ? 0.125 : 0.1;
+  const toolRightRatio = compact ? 0.205 : 0.17;
+
+  return { cols, rows, orthoHeight, zOffset, topPadRatio, hudWorldY, toolStep, sideInsetRatio, toolRightRatio };
 }
 
 function save() {
@@ -157,7 +210,7 @@ function makeObjectiveSprite() {
   if (stage.mode === "word") {
     const chars = stage.shownWord.split("");
     const current = stage.progress;
-    const size = window.innerWidth < 700 ? 102 : 120;
+    const size = window.innerWidth < 700 ? 122 : 148;
     const gap = size * 0.18;
     const font = `900 ${size}px "Arial Black", "Verdana", sans-serif`;
 
@@ -205,19 +258,19 @@ function makeObjectiveSprite() {
     const label = stage.rule.label;
     const next = currentTarget(stage);
     const cased = stage.rule.onlyCase === "lower" ? next.toLowerCase() : next.toUpperCase();
-    cv.width = window.innerWidth < 700 ? 760 : 900;
-    cv.height = window.innerWidth < 700 ? 240 : 280;
+    cv.width = window.innerWidth < 700 ? 840 : 1040;
+    cv.height = window.innerWidth < 700 ? 290 : 360;
 
     cx.textAlign = "center";
     cx.textBaseline = "middle";
-    cx.font = `900 ${window.innerWidth < 700 ? 62 : 72}px "Arial Black", "Verdana", sans-serif`;
+    cx.font = `900 ${window.innerWidth < 700 ? 78 : 92}px "Arial Black", "Verdana", sans-serif`;
     cx.strokeStyle = "rgba(0,0,0,0.8)";
     cx.lineWidth = 10;
     cx.fillStyle = "#b9fff8";
     cx.strokeText(label, cv.width / 2, cv.height * 0.30);
     cx.fillText(label, cv.width / 2, cv.height * 0.30);
 
-    cx.font = `900 ${window.innerWidth < 700 ? 120 : 150}px "Arial Black", "Verdana", sans-serif`;
+    cx.font = `900 ${window.innerWidth < 700 ? 148 : 188}px "Arial Black", "Verdana", sans-serif`;
     cx.shadowColor = "rgba(255,78,243,0.95)";
     cx.shadowBlur = 34;
     cx.strokeStyle = "rgba(0,0,0,0.88)";
@@ -245,7 +298,7 @@ function freeCell(avoid = new Set<string>()) {
   const blocked = snakeSet();
   for (const k of avoid) blocked.add(k);
   for (let i = 0; i < 140; i += 1) {
-    const c = { x: randInt(0, GRID - 1), y: randInt(0, GRID - 1) };
+    const c = { x: randInt(0, gridCols - 1), y: randInt(0, gridRows - 1) };
     if (!blocked.has(cellKey(c))) return c;
   }
   return null;
@@ -350,8 +403,8 @@ function applyMagnetPull() {
     const stepX = head.x === letter.x ? 0 : head.x > letter.x ? 1 : -1;
     const stepY = head.y === letter.y ? 0 : head.y > letter.y ? 1 : -1;
     const next = {
-      x: (letter.x + (Math.abs(head.x - letter.x) >= Math.abs(head.y - letter.y) ? stepX : 0) + GRID) % GRID,
-      y: (letter.y + (Math.abs(head.x - letter.x) < Math.abs(head.y - letter.y) ? stepY : 0) + GRID) % GRID,
+      x: (letter.x + (Math.abs(head.x - letter.x) >= Math.abs(head.y - letter.y) ? stepX : 0) + gridCols) % gridCols,
+      y: (letter.y + (Math.abs(head.x - letter.x) < Math.abs(head.y - letter.y) ? stepY : 0) + gridRows) % gridRows,
     };
 
     const taken = blocked.has(cellKey(next)) || state.letters.some((l) => l !== letter && l.x === next.x && l.y === next.y) || state.boardTools.some((t) => t.x === next.x && t.y === next.y);
@@ -407,13 +460,13 @@ function updateHud() {
   clearHudTools();
 
   hudScore = makeSprite(`${state.score}`, {
-    font: `900 96px "Arial Black", "Verdana", sans-serif`,
+    font: `900 122px "Arial Black", "Verdana", sans-serif`,
     fg: "#b9fff8",
     stroke: "rgba(0,0,0,0.92)",
     strokeW: 14,
     glow: "rgba(255,64,220,0.78)",
     shadowBlur: 20,
-    scale: 0.96,
+    scale: 1.12,
   });
 
   hudObjective = makeObjectiveSprite();
@@ -440,15 +493,15 @@ function placeHud() {
   if (!hudScore || !hudObjective) return;
   const width = camera.right - camera.left;
   const height = camera.top - camera.bottom;
-  const topZ = camera.top - height * 0.06;
+  const topZ = camera.bottom + height * hudTopPadRatio;
 
-  hudScore.position.set(camera.left + width * 0.10, 2.5, topZ);
-  hudObjective.position.set(0, 2.5, topZ);
+  hudScore.position.set(camera.left + width * hudSideInsetRatio, hudY, topZ);
+  hudObjective.position.set(0, hudY, topZ);
 
   let offset = 0;
   for (const sprite of hudToolSprites) {
-    sprite.position.set(camera.right - width * 0.17, 2.5, topZ + 0.92 + offset);
-    offset -= 0.86;
+    sprite.position.set(camera.right - width * hudToolRightRatio, hudY, topZ + 0.92 + offset);
+    offset += hudToolStep;
   }
 }
 
@@ -614,7 +667,7 @@ function moveStep() {
 
   const d = DIR[state.direction];
   const h = state.snake[0];
-  const next = { x: (h.x + d.x + GRID) % GRID, y: (h.y + d.y + GRID) % GRID };
+  const next = { x: (h.x + d.x + gridCols) % gridCols, y: (h.y + d.y + gridRows) % gridRows };
 
   if (state.snake.some((s) => s.x === next.x && s.y === next.y) && !hasTool("shield")) {
     applyMistake("self");
@@ -779,8 +832,8 @@ function animateSnake(alpha: number) {
   for (let i = 0; i < state.snake.length; i += 1) {
     const cur = state.snake[i];
     const prev = state.prevSnake[i] || cur;
-    const x = lerpWrap(prev.x, cur.x, alpha);
-    const y = lerpWrap(prev.y, cur.y, alpha);
+    const x = lerpWrapAxis(prev.x, cur.x, alpha, gridCols);
+    const y = lerpWrapAxis(prev.y, cur.y, alpha, gridRows);
     const wp = toWorld(x, y);
     const m = snakeMeshes[i];
     if (!m) continue;
@@ -798,8 +851,8 @@ function animateSnake(alpha: number) {
       const curSeg = state.snake[i];
       vx = prevSeg.x - curSeg.x;
       vy = prevSeg.y - curSeg.y;
-      if (Math.abs(vx) > GRID / 2) vx += vx > 0 ? -GRID : GRID;
-      if (Math.abs(vy) > GRID / 2) vy += vy > 0 ? -GRID : GRID;
+      if (Math.abs(vx) > gridCols / 2) vx += vx > 0 ? -gridCols : gridCols;
+      if (Math.abs(vy) > gridRows / 2) vy += vy > 0 ? -gridRows : gridRows;
     }
     m.rotation.y = Math.atan2(vx, vy);
 
@@ -819,9 +872,9 @@ function updateCamera() {
   keyLight.color.setHSL((hueB + 0.18) % 1, 0.72, 0.68);
 
   camera.position.x = 0;
-  camera.position.z = 0;
+  camera.position.z = -cameraCenterZ;
   camera.position.y = 26;
-  camera.lookAt(0, 0, 0);
+  camera.lookAt(0, 0, -cameraCenterZ);
 }
 
 function frame(ms: number) {
@@ -848,10 +901,12 @@ function frame(ms: number) {
 }
 
 function initSnake() {
+  const centerX = Math.floor(gridCols / 2);
+  const centerY = Math.floor(gridRows / 2);
   state.snake = [
-    { x: 7, y: 8 },
-    { x: 6, y: 8 },
-    { x: 5, y: 8 },
+    { x: centerX, y: centerY },
+    { x: (centerX - 1 + gridCols) % gridCols, y: centerY },
+    { x: (centerX - 2 + gridCols) % gridCols, y: centerY },
   ];
   state.prevSnake = state.snake.map((s) => ({ ...s }));
   syncSnakeMeshes();
@@ -887,28 +942,63 @@ function registerSW() {
   }
 }
 
-function onResize() {
-  const viewport = window.visualViewport;
-  const viewportWidth = viewport?.width ?? window.innerWidth;
-  const viewportHeight = viewport?.height ?? window.innerHeight;
-  const zoomScale = viewport?.scale ?? 1;
+function rebuildBoard(cols: number, rows: number) {
+  gridCols = cols;
+  gridRows = rows;
+  boardController.build({
+    cols: gridCols,
+    rows: gridRows,
+    cell: CELL,
+    width: boardWidth(),
+    height: boardHeight(),
+    halfW: boardHalfW(),
+    halfH: boardHalfH(),
+  });
+}
 
-  updateOrthoCamera(camera, ORTHO_HEIGHT * zoomScale, viewportWidth, viewportHeight);
+function onResize() {
+  const rect = canvas.getBoundingClientRect();
+  const viewportWidth = Math.max(1, rect.width || window.innerWidth);
+  const viewportHeight = Math.max(1, rect.height || window.innerHeight);
+  const zoomScale = window.visualViewport?.scale ?? 1;
+
+  const prevCols = gridCols;
+  const prevRows = gridRows;
+  const layout = computeResponsiveLayout(viewportWidth, viewportHeight, zoomScale);
+  const gridChanged = layout.cols !== prevCols || layout.rows !== prevRows;
+  if (gridChanged) rebuildBoard(layout.cols, layout.rows);
+
+  orthoHeightDynamic = layout.orthoHeight;
+  cameraCenterZ = layout.zOffset;
+  hudTopPadRatio = layout.topPadRatio;
+  hudY = layout.hudWorldY;
+  hudToolStep = layout.toolStep;
+  hudSideInsetRatio = layout.sideInsetRatio;
+  hudToolRightRatio = layout.toolRightRatio;
+  updateOrthoCamera(camera, orthoHeightDynamic, viewportWidth, viewportHeight);
 
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(viewportWidth, viewportHeight, false);
+
+  if (gridChanged && gameReady) {
+    clearLetters();
+    clearBoardTools();
+    initSnake();
+    nextStage();
+  }
+
   state.hudRefreshAtMs = 0;
   updateHud();
 }
 
 export function initGame() {
   load();
-  boardController.build();
-  initSnake();
   attachInput();
-  nextStage();
   registerSW();
   onResize();
+  initSnake();
+  nextStage();
+  gameReady = true;
   setPaused(state.pause);
   const onFirstInteraction = () => {
     void audio.ensureStarted();

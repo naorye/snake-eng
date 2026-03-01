@@ -4,35 +4,32 @@ import { clearGroup } from "../render/sprites";
 type TileFx = { material: any; parity: number; phase: number };
 
 export type BoardController = {
-  build: () => void;
+  build: (config: { cols: number; rows: number; cell: number; width: number; height: number; halfW: number; halfH: number }) => void;
   update: (clockMs: number) => void;
 };
 
 export function createBoardController(params: {
   groupBoard: any;
-  grid: number;
-  cell: number;
-  boardSize: number;
-  boardHalf: number;
   rand: (min: number, max: number) => number;
   clamp: (v: number, min: number, max: number) => number;
 }): BoardController {
-  const { groupBoard, grid, cell, boardSize, boardHalf, rand, clamp } = params;
+  const { groupBoard, rand, clamp } = params;
   const boardTilesFx: TileFx[] = [];
 
-  function build() {
+  function build(config: { cols: number; rows: number; cell: number; width: number; height: number; halfW: number; halfH: number }) {
+    const { cols, rows, cell, width, height, halfW, halfH } = config;
     clearGroup(groupBoard);
     boardTilesFx.length = 0;
 
-    const baseGeo = new THREE.BoxGeometry(boardSize + 1.2, 1.0, boardSize + 1.2);
+    const baseGeo = new THREE.BoxGeometry(width + 1.2, 1.0, height + 1.2);
     const baseMat = new THREE.MeshStandardMaterial({ color: 0x2a0e4f, roughness: 0.58, metalness: 0.22 });
     const base = new THREE.Mesh(baseGeo, baseMat);
     base.position.y = -0.64;
     groupBoard.add(base);
 
     const tileGeo = new THREE.PlaneGeometry(cell, cell);
-    for (let y = 0; y < grid; y += 1) {
-      for (let x = 0; x < grid; x += 1) {
+    for (let y = 0; y < rows; y += 1) {
+      for (let x = 0; x < cols; x += 1) {
         const parity = (x + y) % 2;
         const mat = new THREE.MeshStandardMaterial({
           color: parity ? 0x2a164f : 0x16354f,
@@ -43,13 +40,15 @@ export function createBoardController(params: {
         });
         const tile = new THREE.Mesh(tileGeo, mat);
         tile.rotation.x = -Math.PI / 2;
-        tile.position.set((x + 0.5) * cell - boardHalf, 0.001, (y + 0.5) * cell - boardHalf);
+        tile.position.set((x + 0.5) * cell - halfW, 0.001, (y + 0.5) * cell - halfH);
         groupBoard.add(tile);
         boardTilesFx.push({ material: mat, parity, phase: rand(0, Math.PI * 2) });
       }
     }
 
-    const gridHelper = new THREE.GridHelper(boardSize, grid, 0x00f5ff, 0xff2df5);
+    const gridSize = Math.max(width, height);
+    const gridDivisions = Math.max(cols, rows);
+    const gridHelper = new THREE.GridHelper(gridSize, gridDivisions, 0x00f5ff, 0xff2df5);
     gridHelper.position.y = 0.01;
     gridHelper.material.opacity = 0.33;
     gridHelper.material.transparent = true;

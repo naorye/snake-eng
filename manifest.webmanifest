@@ -1,0 +1,11 @@
+{
+  "name": "Snake Letters",
+  "short_name": "SnakeLetters",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f6f2e9",
+  "theme_color": "#1f7a8c",
+  "icons": []
+}

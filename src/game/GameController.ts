@@ -419,6 +419,7 @@ function applyMagnetPull() {
 }
 
 const snakeMeshes: Group[] = [];
+let digestPulses: number[] = [];
 
 function syncSnakeMeshes() {
   while (snakeMeshes.length < state.snake.length) {
@@ -532,6 +533,7 @@ function nextStage() {
   state.stageMistakes = 0;
   state.stageStartMs = performance.now();
   state.combo = 0;
+  digestPulses = [];
 
   clearLetters();
   clearBoardTools();
@@ -630,19 +632,20 @@ function applyCorrect() {
 function consumeToolAtHead() {
   const h = state.snake[0];
   const idx = state.boardTools.findIndex((t) => t.x === h.x && t.y === h.y);
-  if (idx < 0) return;
+  if (idx < 0) return false;
 
   const [hit] = state.boardTools.splice(idx, 1);
   groupTools.remove(hit.visual.group);
   disposeObject3D(hit.visual.group);
 
   activateTool(hit.id);
+  return true;
 }
 
 function consumeHead() {
   const h = state.snake[0];
   const idx = state.letters.findIndex((l) => l.x === h.x && l.y === h.y);
-  if (idx < 0) return;
+  if (idx < 0) return false;
 
   const [hit] = state.letters.splice(idx, 1);
   groupLetters.remove(hit.visual.group);
@@ -657,10 +660,14 @@ function consumeHead() {
   const correct = normalizeLetter(hit.char) === expected && hit.role === "target";
   if (correct || allowOneStepBack(hit.char)) applyCorrect();
   else applyMistake("wrong");
+  return true;
 }
 
 function moveStep() {
   if (state.pause || state.stageDone) return;
+  if (digestPulses.length) {
+    digestPulses = digestPulses.map((p) => p + 1).filter((p) => p < state.snake.length);
+  }
 
   state.direction = state.nextDirection;
   state.prevSnake = state.snake.map((s) => ({ ...s }));
@@ -678,8 +685,9 @@ function moveStep() {
   if (state.growBy > 0) state.growBy -= 1;
   else state.snake.pop();
 
-  consumeToolAtHead();
-  consumeHead();
+  const ateTool = consumeToolAtHead();
+  const ateLetter = consumeHead();
+  if (ateTool || ateLetter) digestPulses.push(0);
   ensureSpawns();
   syncSnakeMeshes();
   void audio.onMove(hasTool("shoes") ? 1.18 : 1);
@@ -838,8 +846,15 @@ function animateSnake(alpha: number) {
     const m = snakeMeshes[i];
     if (!m) continue;
     const tailTaper = 1 - (i / Math.max(1, state.snake.length - 1)) * 0.32;
+    let bulge = 0;
+    for (const pulse of digestPulses) {
+      const d = Math.abs(i - (pulse + alpha));
+      if (d < 1.1) bulge += 1 - d / 1.1;
+    }
+    bulge = clamp(bulge, 0, 1);
+    const digestScale = 1 + bulge * 0.42;
     m.position.set(wp.x, 0.38 + Math.sin(time + i * 0.45) * 0.03, wp.z);
-    m.scale.set(tailTaper, 1, tailTaper);
+    m.scale.set(tailTaper * digestScale, digestScale, tailTaper * digestScale);
 
     let vx = 0;
     let vy = 1;
@@ -909,6 +924,7 @@ function initSnake() {
     { x: (centerX - 2 + gridCols) % gridCols, y: centerY },
   ];
   state.prevSnake = state.snake.map((s) => ({ ...s }));
+  digestPulses = [];
   syncSnakeMeshes();
 }
 

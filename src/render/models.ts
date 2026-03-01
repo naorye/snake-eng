@@ -159,54 +159,47 @@ export function makeToolVisual(toolId: string, toolColor: number): ToolVisual {
 
 export function createSnakeMesh(isHead: boolean, snakeSkinTexture: unknown) {
   const g = new THREE.Group();
+  void snakeSkinTexture;
   const skinMat = new THREE.MeshStandardMaterial({
-    color: isHead ? 0x4dff79 : 0x2fd45c,
-    emissive: isHead ? 0x1d7a38 : 0x135629,
-    emissiveIntensity: isHead ? 0.26 : 0.18,
-    metalness: 0.08,
-    roughness: 0.66,
-    map: snakeSkinTexture as never,
+    color: 0xffe66d,
+    emissive: 0xffb800,
+    emissiveIntensity: 0.6,
+    metalness: 0.3,
+    roughness: 0.34,
   });
 
+  const cubeSize = isHead ? 0.82 : 0.74;
+  const core = new THREE.Mesh(new THREE.BoxGeometry(cubeSize, cubeSize * 0.88, cubeSize), skinMat);
+  g.add(core);
+
+  const edgeGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(cubeSize * 1.02, cubeSize * 0.9, cubeSize * 1.02));
+  const edge = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({ color: isHead ? 0xffffff : 0xbffdf2 }));
+  edge.position.y = 0.01;
+  g.add(edge);
+
   if (isHead) {
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.42, 20, 20), skinMat.clone());
-    head.scale.set(1.08, 0.88, 1.25);
-    g.add(head);
-
-    const snout = new THREE.Mesh(
-      new THREE.ConeGeometry(0.16, 0.34, 12),
-      new THREE.MeshStandardMaterial({ color: 0x58ff87, emissive: 0x1f7a3d, emissiveIntensity: 0.18, roughness: 0.5, metalness: 0.05 })
-    );
-    snout.rotation.x = Math.PI / 2;
-    snout.position.z = 0.44;
-    snout.position.y = -0.02;
-    g.add(snout);
-
-    const eyeMat = new THREE.MeshStandardMaterial({ color: 0xf9ffe7, roughness: 0.25, metalness: 0.05 });
-    const pupilMat = new THREE.MeshStandardMaterial({ color: 0x101010, roughness: 0.35, metalness: 0 });
-    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 10), eyeMat);
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const pupilMat = new THREE.MeshBasicMaterial({ color: 0x0b0b0b });
+    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.02, 0.14), eyeMat);
     const eyeR = eyeL.clone();
-    eyeL.position.set(-0.14, 0.12, 0.28);
-    eyeR.position.set(0.14, 0.12, 0.28);
+    eyeL.position.set(-0.18, 0.37, 0.14);
+    eyeR.position.set(0.18, 0.37, 0.14);
     g.add(eyeL, eyeR);
-    const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), pupilMat);
+
+    const pupilL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.02, 0.07), pupilMat);
     const pupilR = pupilL.clone();
-    pupilL.position.set(-0.14, 0.12, 0.34);
-    pupilR.position.set(0.14, 0.12, 0.34);
+    pupilL.position.set(-0.18, 0.385, 0.14);
+    pupilR.position.set(0.18, 0.385, 0.14);
     g.add(pupilL, pupilR);
 
     const tongue = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.1, 0.28),
+      new THREE.PlaneGeometry(0.11, 0.3),
       new THREE.MeshBasicMaterial({ color: 0xff4aa9, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
     );
-    tongue.position.set(0, -0.06, 0.56);
+    tongue.position.set(0, -0.05, 0.52);
     tongue.rotation.x = -Math.PI / 2;
     g.add(tongue);
     g.userData.tongue = tongue;
-  } else {
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.36, 16, 16), skinMat);
-    body.scale.set(1.05, 0.82, 1.22);
-    g.add(body);
   }
 
   g.userData.isHead = isHead;
